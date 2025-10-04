@@ -23,18 +23,18 @@
  */
 
 #define SAMPLE_TIME        0.1   ///< Control loop in s
-#define RATIO              108    ///< Gear ratio of rotator gear box                                 default 54
-#define MICROSTEP          8     ///< Set Microstep
+#define RATIO              20    ///< Gear ratio of rotator gear box                                 default 54
+#define MICROSTEP          2     ///< Set Microstep
 #define MIN_PULSE_WIDTH    20    ///< In microsecond for AccelStepper
 #define MAX_SPEED          3200  ///< In steps/s, consider the microstep
 #define MAX_ACCELERATION   1600  ///< In steps/s^2, consider the microstep
-#define SPR                1600L ///< Step Per Revolution, consider the microstep
+#define SPR                400L ///< Step Per Revolution, consider the microstep
 #define MIN_M1_ANGLE       0     ///< Minimum angle of azimuth
 #define MAX_M1_ANGLE       360   ///< Maximum angle of azimuth
 #define MIN_M2_ANGLE       0     ///< Minimum angle of elevation
 #define MAX_M2_ANGLE       180   ///< Maximum angle of elevation
-#define DEFAULT_HOME_STATE LOW  ///< Change to LOW according to Home sensor
-#define HOME_DELAY         12000 ///< Time for homing Deceleration in millisecond
+#define DEFAULT_HOME_STATE HIGH  ///< Change to LOW according to Home sensor
+#define HOME_DELAY         120000 ///< Time for homing Deceleration in millisecond
 
 #include <AccelStepper.h>
 #include <Wire.h>
@@ -49,7 +49,8 @@ uint32_t t_run = 0; // run time of uC
 easycomm comm;
 AccelStepper stepper_az(1, M1IN1, M1IN2);
 AccelStepper stepper_el(1, M2IN1, M2IN2);
-endstop switch_az(SW1, DEFAULT_HOME_STATE), switch_el(SW2, DEFAULT_HOME_STATE);
+endstop switch_az(SW1, DEFAULT_HOME_STATE);
+endstop switch_el(SW2, DEFAULT_HOME_STATE);
 //wdt_timer wdt;
 
 enum _rotator_error homing(int32_t seek_az, int32_t seek_el);
@@ -79,6 +80,9 @@ void setup() {
 
     // Initialize WDT
    // wdt.watchdog_init();
+
+   Serial.begin(9600);
+   Serial.println("[setup] Serial initialized");
 }
 
 void loop() {
@@ -88,6 +92,11 @@ void loop() {
     // Get end stop status
     rotator.switch_az = switch_az.get_state();
     rotator.switch_el = switch_el.get_state();
+
+    Serial.print("[loop] AZ: ");
+    Serial.println(rotator.switch_az ? "✅" : "❌");
+    Serial.print("[loop] EL: ");
+    Serial.println(rotator.switch_el ? "✅" : "❌");
 
     // Run easycomm implementation
     comm.easycomm_proc();
@@ -155,21 +164,48 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el) {
     bool isHome_az = false;
     bool isHome_el = false;
 
+    Serial.println("[homing] Starting homing sequence");
+    Serial.print("[homing] Seek positions - AZ: ");
+    Serial.print(seek_az);
+    Serial.print(" steps, EL: ");
+    Serial.println(seek_el);
+
     // Move motors to "seek" position
     stepper_az.moveTo(seek_az);
     stepper_el.moveTo(seek_el);
+    Serial.println("[homing] Motors commanded to seek positions");
 
     // Homing loop
+    uint32_t loop_count = 0;
     while (isHome_az == false || isHome_el == false) {
+        loop_count++;
+        
         // Update WDT
        // wdt.watchdog_reset();
+       
+        // Debug: Print current status every 100 loops to avoid spam
+        if (loop_count % 100 == 0) {
+            Serial.print("[homing] Loop #");
+            Serial.print(loop_count);
+            Serial.print(" - AZ pos: ");
+            Serial.print(stepper_az.currentPosition());
+            Serial.print(", EL pos: ");
+            Serial.print(stepper_el.currentPosition());
+            Serial.print(", AZ switch: ");
+            Serial.print(switch_az.get_state() ? "TRIGGERED" : "OPEN");
+            Serial.print(", EL switch: ");
+            Serial.println(switch_el.get_state() ? "TRIGGERED" : "OPEN");
+        }
+        
         if (switch_az.get_state() == true && !isHome_az) {
             // Find azimuth home
+            Serial.println("[homing] ✅ AZIMUTH HOME FOUND!");
             stepper_az.moveTo(stepper_az.currentPosition());
             isHome_az = true;
         }
         if (switch_el.get_state() == true && !isHome_el) {
             // Find elevation home
+            Serial.println("[homing] ✅ ELEVATION HOME FOUND!");
             stepper_el.moveTo(stepper_el.currentPosition());
             isHome_el = true;
         }
@@ -177,12 +213,19 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el) {
         // mechanical)
         if ((stepper_az.distanceToGo() == 0 && !isHome_az) ||
             (stepper_el.distanceToGo() == 0 && !isHome_el)){
+            Serial.println("[homing] ❌ HOMING ERROR - Motor reached limit without finding home");
+            Serial.print("[homing] AZ distance to go: ");
+            Serial.print(stepper_az.distanceToGo());
+            Serial.print(", EL distance to go: ");
+            Serial.println(stepper_el.distanceToGo());
             return homing_error;
         }
         // Move motors to "seek" position
         stepper_az.run();
         stepper_el.run();
     }
+    
+    Serial.println("[homing] Both axes found home, starting deceleration delay");
     // Delay to Deccelerate and homing, to complete the movements
     uint32_t time = millis();
     while (millis() - time < HOME_DELAY) {
@@ -190,12 +233,15 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el) {
         stepper_az.run();
         stepper_el.run();
     }
+    
+    Serial.println("[homing] Setting home positions to zero");
     // Set the home position and reset all critical control variables
     stepper_az.setCurrentPosition(0);
     stepper_el.setCurrentPosition(0);
     control_az.setpoint = 0;
     control_el.setpoint = 0;
 
+    Serial.println("[homing] ✅ Homing sequence completed successfully");
     return no_error;
 }
 
