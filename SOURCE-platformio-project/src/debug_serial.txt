@@ -1,0 +1,33 @@
+#include <Arduino.h>
+#include <SoftwareSerial.h>
+SoftwareSerial subSerial(2, 3); // RX, TX
+
+#include <easycomm.h>
+easycomm comm;
+
+void setup() {
+  subSerial.begin(9600); // Sub Serial
+  subSerial.println("[setup] Sub Serial initialized");
+
+  comm.easycomm_init();
+}
+
+void loop() {
+  // Check if data is available on master serial input
+  if (Serial.available() > 0) {
+    // Read the incoming byte as a raw binary value
+    int incomingByte = Serial.read();
+    
+    // Forward the raw binary byte directly to the subSerial output
+    subSerial.write(incomingByte);
+  }
+  
+  // Print a heartbeat every 5 seconds for connection verification
+  static unsigned long lastHeartbeat = 0;
+  if (millis() - lastHeartbeat > 3000) {
+    subSerial.println("...");
+    lastHeartbeat = millis();
+  }
+  delay(10);
+}
+

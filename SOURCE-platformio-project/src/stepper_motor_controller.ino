@@ -38,7 +38,7 @@
 // ============================
 
 #define DEBUG_SERIAL false // Note: Will break GPREDICT command inputs
-#define SAMPLE_TIME 0.1         ///< Control loop in s
+#define SAMPLE_TIME 0.01         ///< Control loop in s
 #define DEFAULT_HOME_STATE HIGH ///< Change to LOW according to Home sensor
 
 #include <AccelStepper.h>
@@ -87,11 +87,9 @@ void setup()
     // Initialize WDT
     // wdt.watchdog_init();
 
-    if (DEBUG_SERIAL)
-    {
-        Serial.begin(9600);
-        Serial.println("[setup] Serial initialized");
-    }
+    subSerial.begin(BAUDRATE);
+    subSerial.println("[setup] Serial initialized");
+
 }
 
 void loop()
@@ -183,11 +181,11 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el)
 
     if (DEBUG_SERIAL)
     {
-        Serial.println("[homing] Starting homing sequence");
-        Serial.print("[homing] Seek positions - AZ: ");
-        Serial.print(seek_az);
-        Serial.print(" steps, EL: ");
-        Serial.println(seek_el);
+        subSerial.println("[homing] Starting homing sequence");
+        subSerial.print("[homing] Seek positions - AZ: ");
+        subSerial.print(seek_az);
+        subSerial.print(" steps, EL: ");
+        subSerial.println(seek_el);
     }
 
     // Move motors to "seek" position
@@ -196,7 +194,7 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el)
 
     if (DEBUG_SERIAL)
     {
-        Serial.println("[homing] Motors commanded to seek positions");
+        subSerial.println("[homing] Motors commanded to seek positions");
     }
 
     // Homing loop
@@ -211,25 +209,25 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el)
         // Debug: Print current status every 100 loops to avoid spam
         if (DEBUG_SERIAL)
         {
-            if (loop_count % 100 == 0)
+            if (loop_count % 1000 == 0)
             {
-                Serial.print("[homing] Loop #");
-                Serial.print(loop_count);
-                Serial.print(" - AZ pos: ");
-                Serial.print(stepper_az.currentPosition());
-                Serial.print(", EL pos: ");
-                Serial.print(stepper_el.currentPosition());
-                Serial.print(", AZ switch: ");
-                Serial.print(switch_az.get_state() ? "TRIGGERED" : "OPEN");
-                Serial.print(", EL switch: ");
-                Serial.println(switch_el.get_state() ? "TRIGGERED" : "OPEN");
+                subSerial.print("[homing] Loop #");
+                subSerial.print(loop_count);
+                subSerial.print(" - AZ pos: ");
+                subSerial.print(stepper_az.currentPosition());
+                subSerial.print(", EL pos: ");
+                subSerial.print(stepper_el.currentPosition());
+                subSerial.print(", AZ switch: ");
+                subSerial.print(switch_az.get_state() ? "TRIGGERED" : "OPEN");
+                subSerial.print(", EL switch: ");
+                subSerial.println(switch_el.get_state() ? "TRIGGERED" : "OPEN");
             }
         }
         if (switch_az.get_state() == true && !isHome_az)
         {
             // Find azimuth home
             if (DEBUG_SERIAL) {
-                Serial.println("[homing] ✅ AZIMUTH HOME FOUND!");
+                subSerial.println("[homing] ✅ AZIMUTH HOME FOUND!");
             }
             stepper_az.moveTo(stepper_az.currentPosition());
             isHome_az = true;
@@ -238,7 +236,7 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el)
         {
             // Find elevation home
             if (DEBUG_SERIAL) {
-                Serial.println("[homing] ✅ ELEVATION HOME FOUND!");
+                subSerial.println("[homing] ✅ ELEVATION HOME FOUND!");
             }
             stepper_el.moveTo(stepper_el.currentPosition());
             isHome_el = true;
@@ -249,11 +247,11 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el)
             (stepper_el.distanceToGo() == 0 && !isHome_el))
         {
             if (DEBUG_SERIAL) {
-                Serial.println("[homing] ❌ HOMING ERROR - Motor reached limit without finding home");
-                Serial.print("[homing] AZ distance to go: ");
-                Serial.print(stepper_az.distanceToGo());
-                Serial.print(", EL distance to go: ");
-                Serial.println(stepper_el.distanceToGo());
+                subSerial.println("[homing] ❌ HOMING ERROR - Motor reached limit without finding home");
+                subSerial.print("[homing] AZ distance to go: ");
+                subSerial.print(stepper_az.distanceToGo());
+                subSerial.print(", EL distance to go: ");
+                subSerial.println(stepper_el.distanceToGo());
             }
             return homing_error;
         }
@@ -263,7 +261,7 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el)
     }
 
     if (DEBUG_SERIAL) {
-        Serial.println("[homing] Both axes found home, starting deceleration delay");
+        subSerial.println("[homing] Both axes found home, starting deceleration delay");
     }
     // Delay to Deccelerate and homing, to complete the movements
     uint32_t time = millis();
@@ -275,7 +273,7 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el)
     }
 
     if (DEBUG_SERIAL) {
-        Serial.println("[homing] Setting home positions to zero");
+        subSerial.println("[homing] Setting home positions to zero");
     }
     // Set the home position and reset all critical control variables
     stepper_az.setCurrentPosition(0);
@@ -284,7 +282,7 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el)
     control_el.setpoint = 0;
 
     if (DEBUG_SERIAL) {
-        Serial.println("[homing] ✅ Homing sequence completed successfully");
+        subSerial.println("[homing] ✅ Homing sequence completed successfully");
     }
     return no_error;
 }
