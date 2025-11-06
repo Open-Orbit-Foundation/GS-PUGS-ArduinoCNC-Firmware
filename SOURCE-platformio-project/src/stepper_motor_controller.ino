@@ -1,13 +1,7 @@
 /*!
  * @file stepper_motor_controller.ino
  *
- * This is the documentation for satnogs rotator controller firmware
- * for stepper motors configuration. The board (PCB) is placed in
- * <a href="https://gitlab.com/librespacefoundation/satnogs/satnogs-rotator-controller">
- * satnogs-rotator-controller </a> and is for releases:
- * v2.0
- * v2.1
- * v2.2
+ * This is the documentation for satnogs rotator controller firmware, adapted for arduino CNC shield
  * <a href="https://wiki.satnogs.org/SatNOGS_Rotator_Controller"> wiki page </a>
  *
  * @section dependencies Dependencies
@@ -21,19 +15,22 @@
  * Licensed under the GPLv3.
  */
 // ===========================
-#define RATIO 10                ///< Gear ratio of rotator gear box                             
-#define MICROSTEP 2             ///< Set Microstep
-#define MIN_PULSE_WIDTH 20      ///< In microsecond for AccelStepper
-#define MAX_SPEED 600          ///< In steps/s, consider the microstep
-#define MAX_ACCELERATION 450   ///< In steps/s^2, consider the microstep
-#define SPR 400                 ///< Step Per Revolution, consider the microstep
-#define MIN_M1_ANGLE 0       ///< Minimum angle of azimuth
-#define MAX_M1_ANGLE 360        ///< Maximum angle of azimuth
-#define MIN_M2_ANGLE 0          ///< Minimum angle of elevation
-#define MAX_M2_ANGLE 90        ///< Maximum angle of elevation
-#define HOME_DELAY 3000        ///< Time for homing Deceleration in millisecond (random stall that we found)
-#define SAMPLE_TIME 0.01         ///< Control loop in s
-#define DEFAULT_HOME_STATE HIGH  ///< Change to LOW according to Home sensor
+#define RATIO_AZ 10                 // Gear ratio of azimuth rotator gear box
+#define RATIO_EL 40                 // Gear ratio of elevation rotator gear box                             
+#define MICROSTEP 2                 // Set Microstep
+#define MIN_PULSE_WIDTH 20          // In microsecond for AccelStepper
+#define MAX_SPEED_AZ 600            // In steps/s for azimuth (consider the microstep)
+#define MAX_SPEED_EL 800           // In steps/s for elevation 
+#define MAX_ACCELERATION_AZ 400     // In steps/s^2 for azimuth (consider the microstep)
+#define MAX_ACCELERATION_EL 300    // In steps/s^2 for elevation 
+#define SPR 400                     // Step Per Revolution, consider the microstep
+#define MIN_M1_ANGLE 0              // Minimum angle of azimuth
+#define MAX_M1_ANGLE 360            // Maximum angle of azimuth
+#define MIN_M2_ANGLE 0              // Minimum angle of elevation
+#define MAX_M2_ANGLE 90             // Maximum angle of elevation
+#define HOME_DELAY 3000             // Time for homing Deceleration in millisecond (random stall that we found)
+#define SAMPLE_TIME 0.01            // Control loop in s
+#define DEFAULT_HOME_STATE HIGH     // Change to LOW according to Home sensor
 // ============================
 #include <Arduino.h>
 #include <AccelStepper.h>
@@ -52,11 +49,11 @@ endstop switch_az(SW1, DEFAULT_HOME_STATE);
 endstop switch_el(SW2, DEFAULT_HOME_STATE);
 // wdt_timer wdt;
 enum _rotator_error homing(int32_t seek_az, int32_t seek_el);
-int32_t deg2step(float deg);
-float step2deg(int32_t step);
+int32_t deg2step(float deg, bool is_az);
+float step2deg(int32_t step, bool is_az);
 bool LAST_AZ_HOMING_DIRECTION_CCW;  // Last AZ homing rotation direction, true=CCW, false=CW
-uint32_t t_run = 0; // run time of uC
-uint16_t main_loop_counter = 1; // Main loop counter (1-1000, resets to 1 after 1000)
+uint32_t t_run = 0;                 // run time of uC
+uint16_t main_loop_counter = 1; 
 // ============================
 void setup() {
     // Homing switch
@@ -73,14 +70,14 @@ void setup() {
     stepper_az.setEnablePin(MOTOR_EN);
     stepper_az.setPinsInverted(true, false, true); // (directionInvert, stepInvert, enableInvert)
     stepper_az.enableOutputs();
-    stepper_az.setMaxSpeed(MAX_SPEED);
-    stepper_az.setAcceleration(MAX_ACCELERATION);
+    stepper_az.setMaxSpeed(MAX_SPEED_AZ);
+    stepper_az.setAcceleration(MAX_ACCELERATION_AZ);
     stepper_az.setMinPulseWidth(MIN_PULSE_WIDTH);
 
     stepper_el.setPinsInverted(true, false, true); // (directionInvert, stepInvert, enableInvert)
     stepper_el.enableOutputs();
-    stepper_el.setMaxSpeed(MAX_SPEED);
-    stepper_el.setAcceleration(MAX_ACCELERATION);
+    stepper_el.setMaxSpeed(MAX_SPEED_EL);
+    stepper_el.setAcceleration(MAX_ACCELERATION_EL);
     stepper_el.setMinPulseWidth(MIN_PULSE_WIDTH);
 
     // Initialize WDT
@@ -105,8 +102,8 @@ void loop(){
     comm.easycomm_proc();
 
     // Get position of both axis
-    control_az.input = step2deg(stepper_az.currentPosition());
-    control_el.input = step2deg(stepper_el.currentPosition());
+    control_az.input = step2deg(stepper_az.currentPosition(), true);
+    control_el.input = step2deg(stepper_el.currentPosition(), false);
 
    // Check rotator status
    if (rotator.rotator_status != error) {
@@ -114,7 +111,7 @@ void loop(){
             // Check home flag
             rotator.control_mode = position;
             // Homing
-            rotator.rotator_error = homing(deg2step(-MAX_M1_ANGLE), deg2step(-MAX_M2_ANGLE));
+            rotator.rotator_error = homing(deg2step(-MAX_M1_ANGLE, true), deg2step(-MAX_M2_ANGLE, false));
             if (rotator.rotator_error == no_error) {
                 // No error
                 rotator.rotator_status = idle;
@@ -126,8 +123,8 @@ void loop(){
             }
         } else {
             // Control Loop
-            stepper_az.moveTo(deg2step(control_az.setpoint));
-            stepper_el.moveTo(deg2step(control_el.setpoint));
+            stepper_az.moveTo(deg2step(control_az.setpoint, true));
+            stepper_el.moveTo(deg2step(control_el.setpoint, false));
             rotator.rotator_status = pointing;
             // Move azimuth and elevation motors
             stepper_az.run();
@@ -224,12 +221,14 @@ enum _rotator_error homing(int32_t seek_az, int32_t seek_el)
               gear box ratio and microstep
     @param    deg
               Degrees in float format
+    @param    is_az
+              true for azimuth axis, false for elevation axis
     @return   Steps for stepper motor driver, int32_t
 */
 /**************************************************************************/
-int32_t deg2step(float deg)
+int32_t deg2step(float deg, bool is_az)
 {
-    return (RATIO * SPR * deg / 360);
+    return ((is_az ? RATIO_AZ : RATIO_EL) * SPR * deg / 360);
 }
 
 /**************************************************************************/
@@ -238,10 +237,12 @@ int32_t deg2step(float deg)
               gear box ratio and microstep
     @param    step
               Steps in int32_t format
+    @param    is_az
+              true for azimuth axis, false for elevation axis
     @return   Degrees in float format
 */
 /**************************************************************************/
-float step2deg(int32_t step)
+float step2deg(int32_t step, bool is_az)
 {
-    return (360.00 * step / (SPR * RATIO));
+    return (360.00 * step / (SPR * (is_az ? RATIO_AZ : RATIO_EL)));
 }
