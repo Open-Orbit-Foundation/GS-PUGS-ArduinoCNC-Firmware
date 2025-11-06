@@ -61,60 +61,13 @@ public:
         // Read from serial
         while (Serial.available() > 0) {
             incomingByte = Serial.read();
-            subSerial.println("[easycomm_proc] Incoming byte: " + String(incomingByte));
+            //subSerial.println("[easycomm_proc] Incoming byte: " + String(incomingByte));
 
             // Read new data, '\n' means new pacakage
             if (incomingByte == '\n' || incomingByte == '\r') {
                 buffer[BufferCnt] = 0;
                 subSerial.println("[easycomm_proc] Buffer: " + String(buffer));
 
-
-                // if (buffer[0] == 'A' && buffer[1] == 'Z') {
-
-                //     subSerial.println("[easycomm_proc] AZ command received");
-                   
-                //     if (buffer[2] == ' ' && buffer[3] == 'E' &&
-                //         buffer[4] == 'L') {
-                //         subSerial.println("[easycomm_proc] EL command received");
-                //         // Send current absolute position in deg
-                //         str1 = String("AZ");
-                //         str2 = String(control_az.input, 1);
-                //         str3 = String(" EL");
-                //         str4 = String(control_el.input, 1);
-                //         str5 = String("\n");
-                //         Serial.print(str1 + str2 + str3 + str4 + str5);
-
-                //     } else {
-                //         subSerial.println("[easycomm_proc] AZ command received without EL");
-                //         // Get the absolute position in deg for azimuth
-                //         rotator.control_mode = position;
-                //         rawData = strtok_r(Data, " ", &Data);
-                //         strncpy(data, rawData + 2, 10);
-                //         subSerial.println("[easycomm_proc] Data: " + String(data));
-                //         if (isNumber(data)) {
-                //             control_az.setpoint = atof(data);
-                //             subSerial.println("[easycomm_proc] Control AZ setpoint: " + String(control_az.setpoint));
-                //         }
-                //         // Get the absolute position in deg for elevation
-                //         rawData = strtok_r(Data, " ", &Data);
-                //         if (rawData[0] == 'E' && rawData[1] == 'L') {
-                //             strncpy(data, rawData + 2, 10);
-                //             if (isNumber(data)) {
-                //                 control_el.setpoint = atof(data);
-                //             }
-                //         }
-                //     }
-
-                // } else if (buffer[0] == 'E' && buffer[1] == 'L') {
-                //         // Get the absolute position in deg for elevation
-                //         rotator.control_mode = position;
-                //         rawData = strtok_r(Data, " ", &Data);
-                //         if (rawData[0] == 'E' && rawData[1] == 'L') {
-                //             strncpy(data, rawData + 2, 10);
-                //             if (isNumber(data)) {
-                //                 control_el.setpoint = atof(data);
-                //             }
-                //         }
                 if (buffer[0] == 'A' && buffer[1] == 'Z' && buffer[2] == '\0') {
                     // CASE 1: Buffer is just "AZ" - return current AZ position
                     subSerial.println("[easycomm_proc] AZ query command received");
